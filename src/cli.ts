@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { promises as fs } from "fs";
-import { join } from "path";
+import { join, dirname, resolve } from "path";
 import { toVue3Code } from "./index";
 
 const program = new Command();
@@ -13,15 +13,20 @@ program
   .description("Vue 2 to Vue 3 converter tool")
   .argument("<path>", "path of file or directory")
   .option("-d, --debug", "enable debug mode")
+  .option(
+    "-m, --mode <type>",
+    "output mode: 'overwrite' to overwrite the original files, 'newdir' to create a vue3 directory",
+    "newdir"
+  )
   .action(async (path, options) => {
     try {
       const stats = await fs.lstat(path);
       if (stats.isFile()) {
         // 单个文件转换
-        await convertSingleFile(path, options.debug);
+        await convertSingleFile(path, options.debug, options.mode);
       } else if (stats.isDirectory()) {
         // 批量文件转换
-        await convertDirectory(path, options.debug);
+        await convertDirectory(path, options.debug, options.mode);
       } else {
         console.error(`Invalid path: ${path}`);
       }
@@ -33,7 +38,11 @@ program
 program.parse(process.argv);
 
 // 转换单个文件
-async function convertSingleFile(filePath: string, isDebug: boolean) {
+async function convertSingleFile(
+  filePath: string,
+  isDebug: boolean,
+  mode: string
+) {
   try {
     const content = await fs.readFile(filePath, "utf-8");
     let transformedContent;
@@ -45,9 +54,18 @@ async function convertSingleFile(filePath: string, isDebug: boolean) {
       // 跳过未定义错误
       transformedContent = content; // 如果转换失败，保留原始代码
     }
-    const outputPath = getOutputFilePath(filePath);
+
+    // 生成输出路径
+    const outputPath = getOutputFilePath(filePath, mode);
+
+    // 确保目标目录存在（如果是新目录模式）
+    if (mode === "newdir") {
+      await fs.mkdir(dirname(outputPath), { recursive: true });
+    }
+
     await fs.writeFile(outputPath, transformedContent, "utf-8");
     console.log(`File converted and saved to: ${outputPath}`);
+
     if (isDebug) {
       console.log(`Original content:\n${content}`);
       console.log(`Transformed content:\n${transformedContent}`);
@@ -61,7 +79,11 @@ async function convertSingleFile(filePath: string, isDebug: boolean) {
 }
 
 // 批量转换目录下的所有 .vue 文件
-async function convertDirectory(directoryPath: string, isDebug: boolean) {
+async function convertDirectory(
+  directoryPath: string,
+  isDebug: boolean,
+  mode: string
+) {
   try {
     const files = await fs.readdir(directoryPath);
     for (const file of files) {
@@ -69,7 +91,7 @@ async function convertDirectory(directoryPath: string, isDebug: boolean) {
       const stats = await fs.lstat(fullPath);
       if (stats.isFile() && file.endsWith(".vue")) {
         try {
-          await convertSingleFile(fullPath, isDebug);
+          await convertSingleFile(fullPath, isDebug, mode);
         } catch (error) {
           console.error(
             `Error converting file ${fullPath}: ${(error as Error).message}`
@@ -86,9 +108,14 @@ async function convertDirectory(directoryPath: string, isDebug: boolean) {
   }
 }
 
-// 生成输出文件路径（默认在同一目录下生成 .vue3 后缀的文件）
-function getOutputFilePath(filePath: string): string {
-  const ext = ".v3.vue";
-  const newFilePath = filePath.replace(/\.vue$/, ext);
-  return newFilePath;
+// 生成输出文件路径
+function getOutputFilePath(filePath: string, mode: string): string {
+  if (mode === "overwrite") {
+    return filePath; // 覆盖模式下，返回原路径
+  } else {
+    // 新目录模式下，生成 vue3 目录并放入新文件
+    const newDir = join(dirname(filePath), "vue3");
+    const fileName = filePath.split("/").pop() || "converted.vue";
+    return join(newDir, fileName);
+  }
 }
