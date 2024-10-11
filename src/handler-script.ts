@@ -450,10 +450,11 @@ function Vue2ToCompositionApi(
                 {
                   function: (params: any) => {
                     const { type, value, arg, body } = params;
+                    // 修改为箭头函数格式
                     if (type === "custom") {
                       return value.constructor.name === "AsyncFunction"
-                        ? `async function ${methodName} ${arg} ${body}`
-                        : `function ${methodName} ${arg} ${body}`;
+                        ? `const ${methodName} = async ${arg} => ${body}`
+                        : `const ${methodName} = ${arg} => ${body}`;
                     }
                   },
                 }
@@ -581,7 +582,6 @@ function Vue2ToCompositionApi(
       replaceMethodCallsInData(dataBody: string, methods: object): string {
         // 遍历 methods 中的每个方法名称
         for (const methodName in methods) {
-          console.log(methodName);
           const thisMethodCall = `this.${methodName}`;
           // 替换 data 中的 this.methodName 为 methodName
           dataBody = dataBody.replace(
