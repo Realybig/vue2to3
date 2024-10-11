@@ -228,7 +228,6 @@ function Vue2ToCompositionApi(
                     body,
                     vmContent.methods
                   );
-                  console.log("updatedBody", updatedBody);
                   return updatedBody;
                 }
               },
@@ -969,7 +968,6 @@ function Vue2ToCompositionApi(
     // done
     return outputScriptContent;
   } catch (err: any) {
-    console.error(err);
     throw new Error(err);
   }
 }
