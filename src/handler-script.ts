@@ -382,56 +382,25 @@ function Vue2ToCompositionApi(
       hooks(): void {
         if (vmKeys.hooks.length > 0) {
           const hookValues: string[] = [];
+          const v3HooksNameDist: any = {
+            beforeCreate: "onBeforeMount",
+            created: "onMounted",
+            beforeMount: "onBeforeMount",
+            mounted: "onMounted",
+            beforeUpdate: "onBeforeUpdate",
+            updated: "onUpdated",
+            beforeDestroy: "onBeforeUnmount",
+            destroyed: "onUnmounted",
+            activated: "onActivated",
+            deactivated: "onDeactivated",
+            errorCaptured: "onErrorCaptured",
+          };
+
           for (const prop in vmContent.hooks) {
             const hookContent: any = vmContent.hooks[prop];
             if (getPrototype(hookContent).indexOf("function") !== -1) {
-              if (["beforeCreate", "created"].includes(hookContent.name)) {
-                const hookName = `on${hookContent.name
-                  .substring(0, 1)
-                  .toUpperCase()}${hookContent.name.substring(1)}`;
-                const hookFunctionStr: string = utilMethods.getContentStr(
-                  hookContent,
-                  null,
-                  {
-                    function: (params: any) => {
-                      const { type, value, arg, body } = params;
-                      if (type === "custom") {
-                        return value.constructor.name === "AsyncFunction"
-                          ? `async function ${hookName} ${arg} ${body}\n${hookName}()`
-                          : `function ${hookName} ${arg} ${body}\n${hookName}()`;
-                      }
-                    },
-                  }
-                );
-                if (hookName && hookFunctionStr) {
-                  hookValues.push(hookFunctionStr);
-                }
-              } else if (
-                [
-                  "beforeMount",
-                  "mounted",
-                  "beforeUpdate",
-                  "updated",
-                  "beforeDestroy",
-                  "destroyed",
-                  "activated",
-                  "deactivated",
-                  "errorCaptured",
-                ].includes(hookContent.name)
-              ) {
-                const v3HooksNameDist: any = {
-                  beforeMount: "onBeforeMount",
-                  mounted: "onMounted",
-                  beforeUpdate: "onBeforeUpdate",
-                  updated: "onUpdated",
-                  beforeDestroy: "onBeforeUnmount",
-                  destroyed: "onUnmounted",
-                  activated: "onActivated",
-                  deactivated: "onDeactivated",
-                  errorCaptured: "onErrorCaptured",
-                };
-                const hookName: string =
-                  v3HooksNameDist[hookContent.name as string];
+              const hookName = v3HooksNameDist[hookContent.name as string];
+              if (hookName) {
                 const hookFunctionStr: string = utilMethods.getContentStr(
                   hookContent,
                   null,
@@ -446,13 +415,15 @@ function Vue2ToCompositionApi(
                     },
                   }
                 );
-                if (hookName && hookFunctionStr) {
+                if (hookFunctionStr) {
                   hookValues.push(hookFunctionStr);
-                  utilMethods.addImport("vuex", "useStore");
+                  // Add necessary imports for the hook
+                  utilMethods.addImport("vue", hookName);
                 }
               }
             }
           }
+
           if (hookValues.length > 0) {
             vmOutput.hooks = hookValues.join("\n\n");
           }
