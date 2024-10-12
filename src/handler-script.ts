@@ -193,6 +193,40 @@ function Vue2ToCompositionApi(
 
     // vm set content methods init
     const vmSetContentMethods: VmSetContentMethods = {
+      methods(): void {
+        if (vmKeys.methods.length > 0) {
+          const methodValues: string[] = [];
+          for (const prop in vmContent.methods) {
+            const methodContent: any = vmContent.methods[prop];
+            if (getPrototype(methodContent).indexOf("function") !== -1) {
+              const methodName: string = methodContent.name;
+              const methodFunctionStr: string = utilMethods.getContentStr(
+                methodContent,
+                null,
+                {
+                  function: (params: any) => {
+                    const { type, value, arg, body } = params;
+                    // 修改为箭头函数格式
+                    if (type === "custom") {
+                      return value.constructor.name === "AsyncFunction"
+                        ? `const ${methodName} = async ${arg} => ${body}`
+                        : `const ${methodName} = ${arg} => ${body}`;
+                    }
+                  },
+                }
+              );
+              if (methodName && methodFunctionStr) {
+                methodValues.push(methodFunctionStr);
+              }
+            } else {
+              console.log("not in function ");
+            }
+          }
+          if (methodValues.length > 0) {
+            vmOutput.methods = methodValues.join("\n\n");
+          }
+        }
+      },
       props(): void {
         if (vmKeys.props.length > 0) {
           const propsContentStr: string = utilMethods.getContentStr(
@@ -216,56 +250,43 @@ function Vue2ToCompositionApi(
       },
       data(): void {
         if (vmKeys.data.length > 0) {
-          const dataFunctionStr: string = utilMethods.getContentStr(
-            vmContent.data,
-            true,
-            {
-              function: (params: any) => {
-                const { type, body } = params;
-                if (type === "custom") {
-                  // 这里检查并替换 this.methodName 为 methodName
-                  const updatedBody = utilMethods.replaceMethodCallsInData(
-                    body,
-                    vmContent.methods
-                  );
-                  return updatedBody;
-                }
-              },
-            }
-          );
-          if (dataFunctionStr) {
-            const dataContentRegExp = /return ([\s\S]*)\}/;
-            const dataContentStr: string =
-              dataFunctionStr.match(dataContentRegExp)?.[1] || "{}";
-            vmOutput.data = "";
-            utilMethods.addImport("vue", "ref");
+          // 创建包含 methods 的上下文对象
+          const dataContext = {
+            ...vmContent.methods,
+          };
 
-            const text = {};
-            const replacedDataContentStr = dataContentStr.replace(
-              /this\.(\w+)/g,
-              `${dataContentStr}`
-            );
-            const dataObject = eval(
-              `(function(props) {
-                return ${replacedDataContentStr};
-              })`
-            )(text);
+          // 绑定 data 函数到新的上下文
+          const dataFunction = vmBody.data.bind(dataContext);
 
-            const codeLines: string[] = [];
-            const dataSource: Array<IDataSource> = [];
-            for (const key in dataObject) {
-              if (Object.hasOwnProperty.call(dataObject, key)) {
-                const value = dataObject[key];
-                codeLines.push(`const ${key} = ref(${JSON.stringify(value)});`);
-                dataSource.push({
-                  key,
-                  type: "ref",
-                });
-              }
-            }
-            vmOutput.dataSource = dataSource;
-            vmOutput.data = codeLines.join("\n");
+          let dataOptions;
+          try {
+            // 执行 data 函数
+            dataOptions = dataFunction();
+          } catch (error: any) {
+            console.error(`Error executing data function: ${error.message}`);
+            return;
           }
+
+          // 处理数据对象
+          vmOutput.data = "";
+          utilMethods.addImport("vue", "ref");
+
+          const codeLines: string[] = [];
+          const dataSource: Array<IDataSource> = [];
+
+          for (const key in dataOptions) {
+            if (Object.hasOwnProperty.call(dataOptions, key)) {
+              const value = dataOptions[key];
+              codeLines.push(`const ${key} = ref(${JSON.stringify(value)});`);
+              dataSource.push({
+                key,
+                type: "ref",
+              });
+            }
+          }
+
+          vmOutput.dataSource = dataSource;
+          vmOutput.data = codeLines.join("\n");
         }
       },
       computed(): void {
@@ -437,40 +458,7 @@ function Vue2ToCompositionApi(
           }
         }
       },
-      methods(): void {
-        if (vmKeys.methods.length > 0) {
-          const methodValues: string[] = [];
-          for (const prop in vmContent.methods) {
-            const methodContent: any = vmContent.methods[prop];
-            if (getPrototype(methodContent).indexOf("function") !== -1) {
-              const methodName: string = methodContent.name;
-              const methodFunctionStr: string = utilMethods.getContentStr(
-                methodContent,
-                null,
-                {
-                  function: (params: any) => {
-                    const { type, value, arg, body } = params;
-                    // 修改为箭头函数格式
-                    if (type === "custom") {
-                      return value.constructor.name === "AsyncFunction"
-                        ? `const ${methodName} = async ${arg} => ${body}`
-                        : `const ${methodName} = ${arg} => ${body}`;
-                    }
-                  },
-                }
-              );
-              if (methodName && methodFunctionStr) {
-                methodValues.push(methodFunctionStr);
-              }
-            } else {
-              console.log("not in function ");
-            }
-          }
-          if (methodValues.length > 0) {
-            vmOutput.methods = methodValues.join("\n\n");
-          }
-        }
-      },
+
       filters(): void {
         if (vmKeys.filters.length > 0) {
           const filterValues: string[] = [];
@@ -955,14 +943,26 @@ function Vue2ToCompositionApi(
     };
 
     // vm set content methods runing
-    for (const prop in vmSetContentMethods) {
-      const vmSetContentMethod: () => void =
-        vmSetContentMethods[prop as keyof VmSetContentMethods];
-      if (getPrototype(vmSetContentMethod).indexOf("function") !== -1) {
-        vmSetContentMethod();
-      }
+    // 按顺序执行转换方法
+    if (typeof vmSetContentMethods.methods === "function") {
+      vmSetContentMethods.methods(); // 先执行 methods
     }
 
+    if (typeof vmSetContentMethods.data === "function") {
+      vmSetContentMethods.data(); // 再执行 data
+    }
+
+    // 按照原有逻辑执行其他转换方法
+    for (const prop in vmSetContentMethods) {
+      if (prop !== "methods" && prop !== "data") {
+        // 跳过已经执行过的 methods 和 data
+        const vmSetContentMethod: () => void =
+          vmSetContentMethods[prop as keyof VmSetContentMethods];
+        if (getPrototype(vmSetContentMethod).indexOf("function") !== -1) {
+          vmSetContentMethod(); // 执行其他转换方法
+        }
+      }
+    }
     outputScriptContent = jsBeautify(outputScriptContent, jsBeautifyOptions);
 
     // done

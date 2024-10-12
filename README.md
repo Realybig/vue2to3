@@ -19,18 +19,20 @@ npm install @realybig/vue2to3 -g
 ## 使用方法
 
 单文件转换：
-vue2to3 [path]/[filename]
+vue2to3 [path]/[filename] [-m mode]
 
 示例：
 vue2to3 src/components/HelloWorld.vue
 
 批量转换：
-vue2to3 [path]
+vue2to3 [path] [-m mode]
 
 示例：
 vue2to3 src/components/
 
-转换后会在文件目录下生成文件名相同后缀名为 `.v3.vue` 文件
+默认模式转换后会在文件目录下生成一个 vue3 文件夹，转换后的文件会存放到这个文件夹下
+
+overwrite 模式会直接覆盖原文件
 
 ## 路线图
 

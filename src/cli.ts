@@ -4,12 +4,12 @@ import { Command } from "commander";
 import { promises as fs } from "fs";
 import { join, dirname, resolve } from "path";
 import { toVue3Code } from "./index";
-
+const packageJson = require("../package.json");
 const program = new Command();
 
 // 定义命令和选项
 program
-  .version("1.0.0")
+  .version(packageJson.version)
   .description("Vue 2 to Vue 3 converter tool")
   .argument("<path>", "path of file or directory")
   .option("-d, --debug", "enable debug mode")
